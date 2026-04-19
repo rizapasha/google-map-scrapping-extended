@@ -40,10 +40,12 @@
       "storage",
       "tabs",
       "activeTab",
-      "scripting"
+      "scripting",
+      "unlimitedStorage"
     ],
     "host_permissions": [
-      "https://*.google.com/maps/*"
+      "https://*.google.com/maps/*",
+      "https://*.google.co.id/maps/*"
     ]
   }
 }
