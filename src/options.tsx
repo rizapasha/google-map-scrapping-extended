@@ -72,17 +72,13 @@ import {
 } from "lucide-react"
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip"
-
-interface ScrapedData {
-  sessionId: string
-  title: string
-  ratingScore: string
-  reviewCount: string
-  address: string
-  phone: string
-  website: string
-  coordinates: string
-}
+import {
+  calculateLeadScore,
+  generateRowId,
+  formatWhatsAppLink,
+  formatMapsLink,
+  type ScrapedData
+} from "~/lib/utils/scraper-utils"
 
 // --- Reusable Components ---
 
@@ -104,42 +100,6 @@ const StarRating = ({ rating }: { rating: string }) => {
       <span className="ml-1.5 font-bold text-foreground text-sm">{rating || "0"}</span>
     </div>
   )
-}
-
-function calculateLeadScore(item: ScrapedData): number {
-  let score = 0
-  if (item.website) score += 30
-  if (item.phone) score += 30
-
-  const rating = parseFloat(item.ratingScore) || 0
-  if (rating >= 4.0) score += 20
-
-  const reviews = parseInt(item.reviewCount.replace(/,/g, "")) || 0
-  if (reviews >= 10 && reviews <= 1000) score += 20
-
-  return score
-}
-
-function generateRowId(item: ScrapedData): string {
-  return encodeURIComponent(`${item.title}-${item.address}-${item.coordinates}`)
-}
-
-function formatWhatsAppLink(phone: string): string {
-  // Remove all non-numeric characters
-  let cleanNumber = phone.replace(/\D/g, "")
-  // If Indonesian number starts with 0, replace with 62
-  if (cleanNumber.startsWith("0")) {
-    cleanNumber = "62" + cleanNumber.slice(1)
-  }
-  return `https://wa.me/${cleanNumber}`
-}
-
-function formatMapsLink(item: ScrapedData): string {
-  if (item.coordinates) {
-    return `https://www.google.com/maps/place/${item.coordinates}`
-  }
-  const query = encodeURIComponent(`${item.title} ${item.address}`)
-  return `https://www.google.com/maps/search/?api=1&query=${query}`
 }
 
 // --- Main Component ---
