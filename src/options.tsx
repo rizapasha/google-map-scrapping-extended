@@ -1,6 +1,13 @@
 import "./style.css"
 import { useState, useEffect } from "react"
 import { 
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "~/components/ui/accordion"
+import { ScrollArea } from "~/components/ui/scroll-area"
+import { 
   Table, 
   TableBody, 
   TableCell, 
@@ -10,12 +17,13 @@ import {
 } from "~/components/ui/table"
 import { Button } from "~/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card"
-import { Trash2, Download, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
+import { Trash2, Download, RefreshCw } from "lucide-react"
 
 interface ScrapedData {
+  sessionId: string
   title: string
-  rating: string
-  reviews: string
+  ratingScore: string
+  reviewCount: string
   address: string
   phone: string
   website: string
@@ -24,8 +32,6 @@ interface ScrapedData {
 
 function OptionsIndex() {
   const [data, setData] = useState<ScrapedData[]>([])
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 50
 
   useEffect(() => {
     loadData()
@@ -41,7 +47,6 @@ function OptionsIndex() {
     if (confirm("Apakah Anda yakin ingin menghapus semua data?")) {
       chrome.storage.local.set({ scrapedData: [] }, () => {
         setData([])
-        setCurrentPage(1)
       })
     }
   }
@@ -49,11 +54,12 @@ function OptionsIndex() {
   const exportCSV = () => {
     if (data.length === 0) return
 
-    const headers = ["Title", "Rating", "Reviews", "Address", "Phone", "Website", "Coordinates"]
+    const headers = ["Session ID", "Title", "Rating Score", "Review Count", "Address", "Phone", "Website", "Coordinates"]
     const rows = data.map(item => [
+      `"${item.sessionId || "Legacy Session"}"`,
       `"${item.title.replace(/"/g, '""')}"`,
-      `"${item.rating}"`,
-      `"${item.reviews}"`,
+      `"${item.ratingScore}"`,
+      `"${item.reviewCount}"`,
       `"${item.address.replace(/"/g, '""')}"`,
       `"${item.phone}"`,
       `"${item.website}"`,
@@ -72,10 +78,15 @@ function OptionsIndex() {
     document.body.removeChild(link)
   }
 
-  // Pagination logic
-  const totalPages = Math.ceil(data.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedData = data.slice(startIndex, startIndex + itemsPerPage)
+  // Grouping logic
+  const groupedData = data.reduce((acc, item) => {
+    const key = item.sessionId || "Legacy Session"
+    if (!acc[key]) acc[key] = []
+    acc[key].push(item)
+    return acc
+  }, {} as Record<string, ScrapedData[]>)
+
+  const sessionIds = Object.keys(groupedData).sort((a, b) => b.localeCompare(a))
 
   return (
     <div className="p-8 min-h-screen bg-slate-50 dark:bg-slate-950 font-sans">
@@ -105,81 +116,80 @@ function OptionsIndex() {
           <CardHeader>
             <CardTitle>Dataset Overview</CardTitle>
             <CardDescription>
-              Showing {data.length} total entries.
+              Showing {data.length} total entries across {sessionIds.length} sessions.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[250px]">Business Name</TableHead>
-                    <TableHead>Rating</TableHead>
-                    <TableHead className="w-[300px]">Address</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Website</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedData.length > 0 ? (
-                    paginatedData.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">{item.title}</TableCell>
-                        <TableCell>
-                          <span className="flex items-center gap-1">
-                            {item.rating} <span className="text-xs text-muted-foreground">({item.reviews})</span>
+            {sessionIds.length > 0 ? (
+              <Accordion type="multiple" className="w-full space-y-4">
+                {sessionIds.map((sessionId) => (
+                  <AccordionItem value={sessionId} key={sessionId} className="border rounded-md px-4 overflow-hidden">
+                    <div className="flex items-center justify-between py-4 w-full">
+                      <AccordionTrigger className="hover:no-underline py-0 border-none justify-start gap-4">
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-semibold text-base">{sessionId}</span>
+                          <span className="text-sm font-normal text-muted-foreground">
+                            {groupedData[sessionId].length} entries
                           </span>
-                        </TableCell>
-                        <TableCell className="text-sm">{item.address}</TableCell>
-                        <TableCell className="text-sm">{item.phone || "-"}</TableCell>
-                        <TableCell className="text-sm truncate max-w-[150px]">
-                          {item.website ? (
-                            <a href={item.website} target="_blank" className="text-primary hover:underline">
-                              Visit
-                            </a>
-                          ) : "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                        No data available. Start a scraping session from the side panel.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-6">
-                <p className="text-sm text-muted-foreground">
-                  Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, data.length)} of {data.length} entries
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    Previous
-                  </Button>
-                  <div className="text-sm font-medium">
-                    Page {currentPage} of {totalPages}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </div>
+                        </div>
+                      </AccordionTrigger>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (confirm(`Hapus sesi "${sessionId}"?`)) {
+                            const newData = data.filter(d => (d.sessionId || "Legacy Session") !== sessionId)
+                            chrome.storage.local.set({ scrapedData: newData }, loadData)
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Hapus Sesi
+                      </Button>
+                    </div>
+                    <AccordionContent>
+                      <ScrollArea className="h-[400px] w-full rounded-md border mt-2">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[250px]">Business Name</TableHead>
+                              <TableHead>Rating</TableHead>
+                              <TableHead className="w-[300px]">Address</TableHead>
+                              <TableHead>Phone</TableHead>
+                              <TableHead>Website</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {groupedData[sessionId].map((item, index) => (
+                              <TableRow key={index}>
+                                <TableCell className="font-medium">{item.title}</TableCell>
+                                <TableCell>
+                                  <span className="flex items-center gap-1">
+                                    {item.ratingScore} <span className="text-xs text-muted-foreground">({item.reviewCount})</span>
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-sm">{item.address}</TableCell>
+                                <TableCell className="text-sm">{item.phone || "-"}</TableCell>
+                                <TableCell className="text-sm truncate max-w-[150px]">
+                                  {item.website ? (
+                                    <a href={item.website.startsWith('http') ? item.website : `https://${item.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                      Visit
+                                    </a>
+                                  ) : "-"}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            ) : (
+              <div className="h-32 flex items-center justify-center text-muted-foreground border rounded-md">
+                No data available. Start a scraping session from the side panel.
               </div>
             )}
           </CardContent>
