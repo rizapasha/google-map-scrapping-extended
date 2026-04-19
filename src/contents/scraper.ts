@@ -1,7 +1,10 @@
 import type { PlasmoCSConfig } from "plasmo"
 
 export const config: PlasmoCSConfig = {
-  matches: ["https://*.google.com/maps/*"]
+  matches: [
+    "https://*.google.com/maps/*",
+    "https://*.google.co.id/maps/*"
+  ]
 }
 
 export interface ScrapedData {
@@ -35,6 +38,12 @@ function getXPathText(xpath: string, contextNode: Node = document): string {
 // Pause utility
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Randomized delay to mimic human behavior
+const jitteredDelay = async (baseMs = 2000) => {
+  const jitter = Math.random() * 1000 - 500 // +/- 500ms
+  await sleep(baseMs + jitter)
+}
+
 async function extractDetails(): Promise<ScrapedData> {
   // Wait a bit for the pane to fully render
   await sleep(1500)
@@ -56,8 +65,9 @@ async function extractDetails(): Promise<ScrapedData> {
   return { title, rating, reviews, address, phone, website, coordinates } as ScrapedData
 }
 
-async function performScraping() {
-  console.log("SCRAPER: Starting extraction loop...")
+async function performScraping(limit: number) {
+  console.log(`SCRAPER: Starting extraction loop with limit: ${limit}`)
+  chrome.storage.local.set({ isScraping: true })
   
   const results: ScrapedData[] = []
   const scrapedIds = new Set<string>()
@@ -73,109 +83,149 @@ async function performScraping() {
 
   if (!feedElement) {
     console.error("SCRAPER: Feed container not found after search!")
+    chrome.storage.local.set({ isScraping: false })
     return
   }
 
   console.log("SCRAPER: Feed found, starting card iteration...")
 
   let isScrolling = true
-  let maxScrolls = 3 // Limit for testing
-
-  while (isScrolling && maxScrolls > 0) {
-    const cardsResult = document.evaluate(
-      '//a[contains(@class, "hfpxzc")]',
-      document,
-      null,
-      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-      null
-    )
-
-    const snapshotLength = cardsResult.snapshotLength
-    console.log(`SCRAPER: Found ${snapshotLength} cards in current view`)
-    
-    for (let i = 0; i < snapshotLength; i++) {
-      const card = cardsResult.snapshotItem(i) as HTMLAnchorElement
-      const href = card.href
-      
-      if (scrapedIds.has(href)) continue
-      scrapedIds.add(href)
-
-      console.log(`SCRAPER: Clicking card ${i + 1}...`)
-      card.click()
-      
-      const details = await extractDetails()
-      if (details.title) {
-        results.push(details)
-        console.log("SCRAPER: Extracted ->", details.title)
-      }
-
-      // Back to results logic
-      const backButton = document.evaluate(
-        '//button[contains(@class, "hYBOP") or @aria-label="Back" or @aria-label="Kembali"]',
+  
+  try {
+    while (isScrolling && results.length < limit) {
+      const cardsResult = document.evaluate(
+        '//a[contains(@class, "hfpxzc")]',
         document,
         null,
-        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
         null
-      ).singleNodeValue as HTMLButtonElement
+      )
 
-      if (backButton) {
-        backButton.click()
-        await sleep(800)
+      const snapshotLength = cardsResult.snapshotLength
+      console.log(`SCRAPER: Found ${snapshotLength} cards in current view. Progress: ${results.length}/${limit}`)
+      
+      for (let i = 0; i < snapshotLength; i++) {
+        if (results.length >= limit) break
+
+        const card = cardsResult.snapshotItem(i) as HTMLAnchorElement
+        const href = card.href
+        
+        if (scrapedIds.has(href)) continue
+        scrapedIds.add(href)
+
+        // Human-like delay before clicking
+        await jitteredDelay(2000)
+        
+        console.log(`SCRAPER: Clicking card ${results.length + 1}...`)
+        card.click()
+        
+        const details = await extractDetails()
+        if (details.title) {
+          results.push(details)
+          console.log("SCRAPER: Extracted ->", details.title)
+        }
+
+        // Back to results logic
+        const backButton = document.evaluate(
+          '//button[contains(@class, "hYBOP") or @aria-label="Back" or @aria-label="Kembali"]',
+          document,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null
+        ).singleNodeValue as HTMLButtonElement
+
+        if (backButton) {
+          backButton.click()
+          await sleep(1000) // Small wait to return to list
+        }
+      }
+
+      if (results.length < limit) {
+        // Scroll for more results
+        const previousHeight = feedElement.scrollHeight
+        feedElement.scrollTo(0, feedElement.scrollHeight)
+        console.log("SCRAPER: Scrolling for more results...")
+        await jitteredDelay(2500)
+        
+        if (feedElement.scrollHeight === previousHeight) {
+          console.log("SCRAPER: Reached end of feed.")
+          isScrolling = false
+        }
       }
     }
-
-    // Scroll
-    const previousHeight = feedElement.scrollHeight
-    feedElement.scrollTo(0, feedElement.scrollHeight)
-    console.log("SCRAPER: Scrolling for more results...")
-    await sleep(2500)
+  } catch (error) {
+    console.error("SCRAPER: Error during scraping:", error)
+  } finally {
+    console.log("SCRAPER: Finished. Total Extracted:", results.length)
     
-    if (feedElement.scrollHeight === previousHeight) {
-      isScrolling = false
-    }
-    maxScrolls--
+    chrome.storage.local.get(["scrapedData"], (res) => {
+      const existing = (res.scrapedData as ScrapedData[]) || []
+      chrome.storage.local.set({ 
+        scrapedData: [...existing, ...results],
+        isScraping: false 
+      })
+    })
+
+    alert(`Scraping Selesai! Berhasil mengambil ${results.length} data.`)
   }
-
-  console.log("SCRAPER: Finished. Total Extracted:", results.length)
-  
-  chrome.storage.local.get(["scrapedData"], (res) => {
-    const existing = (res.scrapedData as ScrapedData[]) || []
-    chrome.storage.local.set({ scrapedData: [...existing, ...results] })
-  })
-
-  alert(`Scraping Selesai! Berhasil mengambil ${results.length} data.`)
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("SCRAPER: Received message", message)
   
+  if (message.action === "PING") {
+    sendResponse({ success: true })
+    return true
+  }
+
   if (message.action === "START_SCRAPING") {
-    const { context, location } = message.payload
+    const { context, location, limit } = message.payload
     
     const searchBox = document.querySelector('input#searchboxinput, input[aria-label*="Maps"], input[name="q"]') as HTMLInputElement
     const searchButton = document.querySelector('button#searchbox-searchbutton, button[aria-label*="Search"], button[aria-label*="Telusuri"]') as HTMLButtonElement
 
     if (searchBox && searchButton) {
       console.log("SCRAPER: Injecting query and triggering search")
+      chrome.storage.local.set({ isScraping: true })
       
       searchBox.focus()
       searchBox.value = `${context} ${location}`
       
-      // Essential events for Google Maps to recognize the change
       searchBox.dispatchEvent(new Event("input", { bubbles: true }))
       searchBox.dispatchEvent(new Event("change", { bubbles: true }))
       
+      // NEW: Simulate pressing Enter key which is more reliable in Gmaps
+      const enterEvent = new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+      })
+      
       setTimeout(() => {
-        searchButton.click()
+        console.log("SCRAPER: Dispatching Enter key events")
+        searchBox.dispatchEvent(enterEvent)
         
+        // Add keyup to complete the sequence
+        searchBox.dispatchEvent(new KeyboardEvent("keyup", {
+          key: "Enter",
+          code: "Enter",
+          bubbles: true
+        }))
+
+        searchButton.click()
+
         setTimeout(() => {
-          performScraping()
-        }, 5000)
+          performScraping(limit || 500)
+        }, 7000)
       }, 500)
       
       sendResponse({ success: true })
     } else {
       console.error("SCRAPER: Search elements not found!")
+      chrome.storage.local.set({ isScraping: false })
       sendResponse({ success: false, error: "Elemen pencarian tidak ditemukan. Silakan refresh halaman." })
     }
   }
