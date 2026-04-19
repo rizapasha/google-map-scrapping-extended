@@ -1,27 +1,71 @@
 import "./style.css"
 import { useState, useEffect } from "react"
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select"
-import { ScrollArea } from "~/components/ui/scroll-area"
 import { Switch } from "~/components/ui/switch"
 import { Label } from "~/components/ui/label"
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "~/components/ui/table"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card"
-import { Trash2, Download, RefreshCw, Database, Search, Star, StarHalf, ArrowUpDown } from "lucide-react"
+import { Badge } from "~/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
+import { Separator } from "~/components/ui/separator"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  SidebarSeparator,
+} from "~/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu"
+import {
+  Trash2,
+  Download,
+  RefreshCw,
+  Database,
+  Search,
+  Star,
+  StarHalf,
+  ArrowUpDown,
+  MapPin,
+  Phone,
+  Globe,
+  ExternalLink,
+  MoreHorizontal,
+  Copy,
+  TrendingUp,
+  Users,
+  BarChart3,
+  FolderOpen,
+} from "lucide-react"
 
 interface ScrapedData {
   sessionId: string
@@ -33,6 +77,8 @@ interface ScrapedData {
   website: string
   coordinates: string
 }
+
+// --- Reusable Components ---
 
 const StarRating = ({ rating }: { rating: string }) => {
   const score = parseFloat(rating) || 0
@@ -49,12 +95,14 @@ const StarRating = ({ rating }: { rating: string }) => {
       {[...Array(emptyStars)].map((_, i) => (
         <Star key={`empty-${i}`} className="w-3.5 h-3.5 text-muted-foreground/30" />
       ))}
-      <span className="ml-1.5 font-bold text-slate-700 dark:text-slate-200 text-sm">
+      <span className="ml-1.5 font-bold text-foreground text-sm">
         {rating || "0"}
       </span>
     </div>
   )
 }
+
+// --- Main Component ---
 
 function OptionsIndex() {
   const [data, setData] = useState<ScrapedData[]>([])
@@ -64,20 +112,24 @@ function OptionsIndex() {
   const [sortBy, setSortBy] = useState<string>("default")
   const [hideNoWebsite, setHideNoWebsite] = useState(false)
   const [hideNoPhone, setHideNoPhone] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
 
   useEffect(() => {
     loadData()
   }, [])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedSession, searchQuery, minRating, sortBy, hideNoWebsite, hideNoPhone])
+
   const loadData = () => {
     chrome.storage.local.get(["scrapedData"], (res) => {
       const storedData = (res.scrapedData as ScrapedData[]) || []
       setData(storedData)
-      
-      // Auto-select the most recent session if available
+
       if (storedData.length > 0) {
         const uniqueSessions = Array.from(new Set(storedData.map(item => item.sessionId || "Legacy Session")))
-        // Sessions are roughly timestamped, sort descending to get newest
         uniqueSessions.sort((a, b) => b.localeCompare(a))
         setSelectedSession(uniqueSessions[0])
       } else {
@@ -87,7 +139,7 @@ function OptionsIndex() {
   }
 
   const clearDatabase = () => {
-    if (confirm("Apakah Anda yakin ingin menghapus semua data?")) {
+    if (confirm("Are you sure you want to delete all data?")) {
       chrome.storage.local.set({ scrapedData: [] }, () => {
         setData([])
       })
@@ -121,7 +173,7 @@ function OptionsIndex() {
     document.body.removeChild(link)
   }
 
-  // Grouping logic
+  // --- Data processing ---
   const groupedData = data.reduce((acc, item) => {
     const key = item.sessionId || "Legacy Session"
     if (!acc[key]) acc[key] = []
@@ -130,11 +182,10 @@ function OptionsIndex() {
   }, {} as Record<string, ScrapedData[]>)
 
   const sessionIds = Object.keys(groupedData).sort((a, b) => b.localeCompare(a))
-
   const currentData = selectedSession ? groupedData[selectedSession] || [] : []
 
   const filteredData = currentData.filter(item => {
-    const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          item.address.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesRating = parseFloat(item.ratingScore) >= minRating
     const hasWebsite = !hideNoWebsite || !!item.website
@@ -149,50 +200,65 @@ function OptionsIndex() {
     return 0
   })
 
-  console.log(sortedData);
-  
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage)
+  const paginatedData = sortedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
+  // Stats
+  const withPhone = currentData.filter(item => !!item.phone).length
+  const highlyRated = currentData.filter(item => (parseFloat(item.ratingScore) || 0) > 4.5).length
+  const withWebsite = currentData.filter(item => !!item.website).length
 
   return (
-    <ScrollArea className="h-screen w-full bg-slate-50 dark:bg-slate-950">
-      <div className="flex min-h-screen">
-        {/* Sticky Sidebar */}
-        <aside className="w-80 border-r bg-slate-50 dark:bg-slate-900/50 p-6 flex flex-col gap-6 sticky top-0 h-screen shrink-0">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-primary">Dashboard</h1>
-            <p className="text-sm text-muted-foreground leading-none">Scraper Management</p>
-          </div>
-
-          <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-            <div className="space-y-3">
-              <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Session Selection</Label>
-              <Select value={selectedSession} onValueChange={setSelectedSession}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a session" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sessionIds.map(id => (
-                    <SelectItem key={id} value={id}>
-                      {id.length > 30 ? id.substring(0, 30) + "..." : id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+    <SidebarProvider>
+      {/* ===== SIDEBAR ===== */}
+      <Sidebar>
+        {/* Sidebar Header */}
+        <SidebarHeader className="p-4">
+          <div className="flex items-center gap-2 px-2">
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Database className="size-4" />
             </div>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-semibold">Maps Scraper</span>
+              <span className="truncate text-xs">Dashboard</span>
+            </div>
+          </div>
+        </SidebarHeader>
 
-            <div className="pt-4 border-t space-y-4">
-              <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Display & Sort</Label>
-              
-              <div className="space-y-2">
-                <Label className="text-sm">Order By</Label>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger>
-                    <div className="flex items-center gap-2">
-                      <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
-                      <SelectValue placeholder="Default Order" />
-                    </div>
+        <SidebarContent>
+          {/* Session Selection */}
+          <SidebarGroup>
+            <SidebarGroupLabel>Session</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <div className="px-2">
+                <Select value={selectedSession} onValueChange={setSelectedSession}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select session" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">Default Sequence</SelectItem>
+                    {sessionIds.map(id => (
+                      <SelectItem key={id} value={id}>
+                        {id.length > 28 ? id.substring(0, 28) + "..." : id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          {/* Filters */}
+          <SidebarGroup>
+            <SidebarGroupLabel>Filters</SidebarGroupLabel>
+            <SidebarGroupContent className="px-2 space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label className="text-xs">Sort By</Label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
                     <SelectItem value="rating-desc">Highest Rating</SelectItem>
                     <SelectItem value="rating-asc">Lowest Rating</SelectItem>
                     <SelectItem value="reviews-desc">Most Reviews</SelectItem>
@@ -201,10 +267,10 @@ function OptionsIndex() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm">Minimum Rating</Label>
+                <Label className="text-xs">Min Rating</Label>
                 <Select value={minRating.toString()} onValueChange={(val) => setMinRating(parseFloat(val))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Ratings" />
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="0">All Ratings</SelectItem>
@@ -217,177 +283,296 @@ function OptionsIndex() {
 
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="hide-no-website" className="text-sm cursor-pointer">Hide No Website</Label>
-                  <Switch 
-                    id="hide-no-website" 
-                    checked={hideNoWebsite} 
+                  <Label htmlFor="hide-no-website" className="text-xs cursor-pointer">Hide No Website</Label>
+                  <Switch
+                    id="hide-no-website"
+                    checked={hideNoWebsite}
                     onCheckedChange={setHideNoWebsite}
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="hide-no-phone" className="text-sm cursor-pointer">Hide No Phone</Label>
-                  <Switch 
-                    id="hide-no-phone" 
-                    checked={hideNoPhone} 
+                  <Label htmlFor="hide-no-phone" className="text-xs cursor-pointer">Hide No Phone</Label>
+                  <Switch
+                    id="hide-no-phone"
+                    checked={hideNoPhone}
                     onCheckedChange={setHideNoPhone}
                   />
                 </div>
               </div>
-            </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
 
-          <div className="space-y-3 pt-4 border-t">
-              <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Actions</Label>
-              <div className="grid gap-2">
-                <Button variant="default" onClick={loadData} className="w-full justify-start">
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Refresh Results
-                </Button>
-                <Button variant="secondary" onClick={exportCSV} disabled={data.length === 0} className="w-full justify-start">
-                  <Download className="mr-2 h-4 w-4" />
-                  Export to CSV
-                </Button>
-                
-                <div className="pt-4 mt-2 border-t border-dashed">
-                  <Button 
-                    variant="destructive" 
-                    onClick={() => {
-                      if (confirm(`Hapus sesi "${selectedSession}"?`)) {
-                        const newData = data.filter(d => (d.sessionId || "Legacy Session") !== selectedSession)
-                        chrome.storage.local.set({ scrapedData: newData }, loadData)
-                      }
-                    }} 
-                    disabled={!selectedSession}
-                    className="w-full justify-start"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Session
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    onClick={clearDatabase} 
-                    disabled={data.length === 0} 
-                    className="w-full justify-start"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Clear Full History
-                  </Button>
-                </div>
-              </div>
+        {/* Sidebar Footer: Actions */}
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={loadData}>
+                <RefreshCw />
+                <span>Refresh</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={exportCSV} disabled={data.length === 0}>
+                <Download />
+                <span>Export CSV</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => {
+                  if (confirm(`Delete session "${selectedSession}"?`)) {
+                    const newData = data.filter(d => (d.sessionId || "Legacy Session") !== selectedSession)
+                    chrome.storage.local.set({ scrapedData: newData }, loadData)
+                  }
+                }}
+                disabled={!selectedSession}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 />
+                <span>Delete Session</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={clearDatabase}
+                disabled={data.length === 0}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 />
+                <span>Clear All</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
+
+      {/* ===== MAIN CONTENT ===== */}
+      <SidebarInset>
+        {/* Header */}
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <div className="flex flex-1 items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">
+                {selectedSession || "Overview"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {selectedSession
+                  ? `${currentData.length} records in this session`
+                  : "Select a session to view data"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 pr-4">
+              <Badge variant="outline" className="font-mono">
+                {sessionIds.length} sessions
+              </Badge>
+              <Badge variant="secondary" className="font-mono">
+                {data.length} total records
+              </Badge>
             </div>
           </div>
+        </header>
 
-          <div className="pt-6 border-t bg-slate-50/80 dark:bg-slate-900/80 -mx-6 px-6 pb-2">
-            <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-3 opacity-60">System Statistics</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
-                <div className="text-2xl font-black text-primary leading-none">{data.length}</div>
-                <div className="text-[10px] text-muted-foreground uppercase font-bold mt-2 tracking-tighter">Total Records</div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pt-0 mt-6 space-y-6">
+          {selectedSession ? (
+            <>
+              {/* Stat Cards */}
+              <div className="grid gap-4 md:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Places</CardTitle>
+                    <Database className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{currentData.length}</div>
+                    <p className="text-xs text-muted-foreground">in this session</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Highly Rated</CardTitle>
+                    <Star className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{highlyRated}</div>
+                    <p className="text-xs text-muted-foreground">{">"} 4.5 stars rating</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">With Phone</CardTitle>
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{withPhone}</div>
+                    <p className="text-xs text-muted-foreground">
+                      {currentData.length > 0
+                        ? `${Math.round((withPhone / currentData.length) * 100)}% of total`
+                        : "no data"}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">With Website</CardTitle>
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{withWebsite}</div>
+                    <p className="text-xs text-muted-foreground">
+                      {currentData.length > 0
+                        ? `${Math.round((withWebsite / currentData.length) * 100)}% of total`
+                        : "no data"}
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
-                <div className="text-2xl font-black text-primary leading-none">{sessionIds.length}</div>
-                <div className="text-[10px] text-muted-foreground uppercase font-bold mt-2 tracking-tighter">Total Sessions</div>
-              </div>
-            </div>
-          </div>
-        </aside>
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-8 overflow-hidden">
-          <div className="w-full space-y-6">
-            <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm">
-              <div className="relative flex-1 max-w-xl">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search business names, addresses, or locations..." 
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="text-sm font-medium px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-400">
-                Found <b>{sortedData.length}</b> matches
-              </div>
-            </div>
-
-            <Card className="border shadow-md overflow-hidden bg-white dark:bg-slate-950">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1.5">
-                    <CardTitle className="text-2xl font-black tracking-tight">
-                      {selectedSession || "Overview"}
-                    </CardTitle>
-                    <CardDescription className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      Displaying {sortedData.length} entries for this view.
-                    </CardDescription>
-                  </div>
-                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl border">
-                    <Database className="w-6 h-6 text-primary" />
-                  </div>
+              {/* Table Section */}
+              <div className="space-y-4">
+                {/* Toolbar */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Filter places..."
+                    className="max-w-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <Button variant="outline" size="sm" onClick={exportCSV}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export
+                  </Button>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {selectedSession ? (
+
+                {/* Data Table */}
+                <div className="overflow-hidden rounded-md border w-full">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Business Name</TableHead>
-                        <TableHead>Rating Analysis</TableHead>
-                        <TableHead>Location Address</TableHead>
-                        <TableHead>Contact Number</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
+                        <TableHead className="w-[50px]">#</TableHead>
+                        <TableHead className="w-[45%]">Business & Address</TableHead>
+                        <TableHead className="w-[10%]">Rating</TableHead>
+                        <TableHead className="w-[15%]">Phone</TableHead>
+                        <TableHead className="w-[30%]">Website</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sortedData.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{item.title}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <StarRating rating={item.ratingScore} />
-                              <div className="text-[10px] text-muted-foreground ml-0.5 font-medium uppercase tracking-tighter">
-                                {item.reviewCount || "No"} Reviews
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{item.address}</TableCell>
-                          <TableCell className="font-mono">{item.phone || "-"}</TableCell>
-                          <TableCell className="text-right">
-                            {item.website ? (
-                              <Button variant="outline" size="sm" asChild>
-                                <a 
-                                  href={item.website.startsWith('http') ? item.website : `https://${item.website}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                >
-                                  Visit
-                                </a>
-                              </Button>
-                            ) : (
-                              <span className="text-muted-foreground text-xs italic">No Website</span>
-                            )}
+                      {paginatedData.length ? (
+                        paginatedData.map((item, index) => {
+                          const actualIndex = (currentPage - 1) * itemsPerPage + index + 1
+                          return (
+                            <TableRow key={index}>
+                              <TableCell className="text-muted-foreground font-mono text-xs">
+                                {actualIndex}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-semibold">{item.title}</span>
+                                  <div className="flex items-start gap-1.5 text-muted-foreground">
+                                    <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
+                                    <span className="text-xs">
+                                      {item.address || "—"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="space-y-0.5">
+                                  <StarRating rating={item.ratingScore} />
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {item.reviewCount || "0"} reviews
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {item.phone ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                    <span className="font-mono text-sm">{item.phone}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {item.website ? (
+                                  <a
+                                    href={item.website.startsWith('http') ? item.website : `https://${item.website}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center text-xs font-medium text-primary hover:underline truncate max-w-[200px]"
+                                  >
+                                    {item.website}
+                                    <ExternalLink className="ml-1 h-3 w-3 shrink-0" />
+                                  </a>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="h-24 text-center">
+                            No results.
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )}
                     </TableBody>
                   </Table>
-                ) : (
-                  <div className="h-96 flex flex-col items-center justify-center text-muted-foreground bg-slate-50/30 dark:bg-slate-900/30 space-y-4">
-                    <div className="p-4 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-dashed">
-                      <Database className="w-10 h-10 opacity-20" />
-                    </div>
-                    <div className="text-center space-y-1">
-                      <p className="font-medium text-slate-600 dark:text-slate-400">No session selected</p>
-                      <p className="text-sm opacity-60">Choose a session from the sidebar to view your data.</p>
-                    </div>
+                </div>
+
+                {/* Footer with Pagination */}
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-muted-foreground font-medium">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, sortedData.length)} of {sortedData.length} records
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </main>
-      </div>
-    </ScrollArea>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <div className="text-sm font-medium px-4 py-1.5 bg-muted rounded-md border min-w-[100px] text-center">
+                      Page {currentPage} of {totalPages || 1}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                      disabled={currentPage === totalPages || totalPages === 0}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Empty State */
+            <div className="flex-1 flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
+              <div className="rounded-full bg-muted p-4">
+                <FolderOpen className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">No session selected</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Select a scraping session from the sidebar to view and manage your extracted data.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
