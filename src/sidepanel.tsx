@@ -11,14 +11,19 @@ function IndexSidePanel() {
   const [context, setContext] = useState("")
   const [location, setLocation] = useState("")
   const [limit, setLimit] = useState(500)
-  const [isAutoScroll, setIsAutoScroll] = useState(true)
   const [isScraping, setIsScraping] = useState(false)
+  const [currentSessionCount, setCurrentSessionCount] = useState(0)
+  const [currentSessionLimit, setCurrentSessionLimit] = useState(500)
 
   // Sync isScraping state with storage for persistence
   useEffect(() => {
-    chrome.storage.local.get(["isScraping", "scrapingTabId"], (res) => {
+    chrome.storage.local.get(["isScraping", "scrapingTabId", "currentSessionCount", "currentSessionLimit"], (res) => {
       const storedIsScraping = !!res.isScraping
       setIsScraping(storedIsScraping)
+      setCurrentSessionCount(Number(res.currentSessionCount) || 0)
+      if (res.currentSessionLimit) {
+        setCurrentSessionLimit(Number(res.currentSessionLimit))
+      }
 
       // If storage says we are scraping, verify if the tab is still alive
       if (storedIsScraping && typeof res.scrapingTabId === "number") {
@@ -35,6 +40,12 @@ function IndexSidePanel() {
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       if (changes.isScraping) {
         setIsScraping(!!changes.isScraping.newValue)
+      }
+      if (changes.currentSessionCount) {
+        setCurrentSessionCount(Number(changes.currentSessionCount.newValue) || 0)
+      }
+      if (changes.currentSessionLimit) {
+        setCurrentSessionLimit(Number(changes.currentSessionLimit.newValue) || 500)
       }
     }
 
@@ -140,21 +151,15 @@ function IndexSidePanel() {
               />
             </div>
           </div>
-          
-          <div className="flex items-center justify-between space-x-2 rounded-lg border p-3 shadow-sm">
-            <div className="space-y-0.5">
-              <Label htmlFor="auto-scroll" className="text-sm font-medium">Auto Scroll</Label>
-              <p className="text-xs text-muted-foreground">Automatically scroll map results</p>
-            </div>
-            <Switch
-              id="auto-scroll"
-              checked={isAutoScroll}
-              onCheckedChange={setIsAutoScroll}
-              disabled={isScraping}
-            />
-          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3">
+          {isScraping && (
+            <div className="w-full text-center py-2 bg-slate-100 dark:bg-slate-800 rounded-md">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {currentSessionCount} / {currentSessionLimit} items found
+              </span>
+            </div>
+          )}
           {isScraping ? (
             <Button 
               className="w-full gap-2" 
