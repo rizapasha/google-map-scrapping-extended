@@ -1,0 +1,68 @@
+name: Release Extension
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version Bump Type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test
+
+      - name: Setup Git Bot
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump Version
+        run: |
+          npm version ${{ github.event.inputs.bump_type }} -m "chore(release): v%s"
+
+      - name: Build Extension
+        run: npm run build
+
+      - name: Extract new version
+        id: get_version
+        run: echo "VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
+      - name: Zip Build output
+        run: |
+          cd build/chrome-mv3-prod
+          zip -r ../../google-maps-scraper-v${{ steps.get_version.outputs.VERSION }}.zip .
+
+      - name: Push Commit and Tags
+        run: git push origin main --follow-tags
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ format('v{0}', steps.get_version.outputs.VERSION) }}
+          name: ${{ format('Release v{0}', steps.get_version.outputs.VERSION) }}
+          files: ${{ format('google-maps-scraper-v{0}.zip', steps.get_version.outputs.VERSION) }}
+          generate_release_notes: true
