@@ -3,6 +3,7 @@
     "paths": {
       "~*": ["./src/*"]
     },
+    "module": "esnext",
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
