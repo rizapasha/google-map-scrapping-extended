@@ -3,8 +3,7 @@
     "paths": {
       "~*": ["./src/*"]
     },
-    "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
