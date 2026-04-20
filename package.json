@@ -4,10 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Chrome Extension for Scraping Google Maps Data",
-  "main": "index.js",
   "scripts": {
     "dev": "plasmo dev",
-    "build": "plasmo build --build-path=./build",
+    "build": "plasmo build",
     "test": "vitest run",
     "lint": "eslint 'src/**/*.{ts,tsx}'",
     "format": "prettier --write 'src/**/*.{ts,tsx,css}'",
