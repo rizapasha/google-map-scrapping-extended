@@ -1,9 +1,15 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { calculateLeadScore, generateRowId, type ScrapedData } from "../utils/scraper-utils"
+import {
+  calculateLeadScore,
+  generateRowId,
+  type ScrapedData,
+  type CrmData
+} from "../utils/scraper-utils"
 import { toast } from "sonner"
 
 export function useDashboard() {
   const [data, setData] = useState<ScrapedData[]>([])
+  const [crmData, setCrmData] = useState<Record<string, CrmData>>({})
   const [selectedSession, setSelectedSession] = useState<string>("")
   const [searchQuery, setSearchQuery] = useState("")
   const [minRating, setMinRating] = useState<number>(0)
@@ -13,6 +19,7 @@ export function useDashboard() {
   const [showTopTierOnly, setShowTopTierOnly] = useState(false)
   const [minReviews, setMinReviews] = useState<string>("")
   const [maxReviews, setMaxReviews] = useState<string>("")
+  const [statusFilter, setStatusFilter] = useState<string>("ALL")
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [confirmState, setConfirmState] = useState<{
@@ -34,9 +41,12 @@ export function useDashboard() {
   }
 
   const loadData = useCallback(() => {
-    chrome.storage.local.get(["scrapedData"], (res) => {
+    chrome.storage.local.get(["scrapedData", "crmData"], (res) => {
       const storedData = (res.scrapedData as ScrapedData[]) || []
+      const storedCrm = (res.crmData as Record<string, CrmData>) || {}
+
       setData(storedData)
+      setCrmData(storedCrm)
 
       if (storedData.length > 0) {
         const uniqueSessions = Array.from(
@@ -117,17 +127,30 @@ export function useDashboard() {
       const parsedMaxRev = maxReviews ? parseInt(maxReviews) : Infinity
       const matchesReviews = revCount >= parsedMinRev && revCount <= parsedMaxRev
 
-      return matchesSearch && matchesRating && hasWebsite && hasPhone && isTopTier && matchesReviews
+      const status = crmData[generateRowId(item)]?.status || "NEW"
+      const matchesStatus = statusFilter === "ALL" || status === statusFilter
+
+      return (
+        matchesSearch &&
+        matchesRating &&
+        hasWebsite &&
+        hasPhone &&
+        isTopTier &&
+        matchesReviews &&
+        matchesStatus
+      )
     })
   }, [
     currentData,
+    crmData,
     searchQuery,
     minRating,
     hideNoWebsite,
     hideNoPhone,
     showTopTierOnly,
     minReviews,
-    maxReviews
+    maxReviews,
+    statusFilter
   ])
 
   const sortedData = useMemo(() => {
@@ -206,6 +229,12 @@ export function useDashboard() {
     setSelectedIds(new Set())
   }
 
+  const handleStatusFilterChange = (val: string) => {
+    setStatusFilter(val)
+    setCurrentPage(1)
+    setSelectedIds(new Set())
+  }
+
   const handleSelectRow = (id: string, checked: boolean) => {
     const next = new Set(selectedIds)
     if (checked) next.add(id)
@@ -264,6 +293,22 @@ export function useDashboard() {
     )
   }
 
+  const updateCrmData = (rowId: string, updates: Partial<CrmData>) => {
+    const newCrm = { ...crmData }
+    const current = newCrm[rowId] || { status: "NEW", notes: "", lastUpdated: Date.now() }
+
+    newCrm[rowId] = {
+      ...current,
+      ...updates,
+      lastUpdated: Date.now()
+    }
+
+    chrome.storage.local.set({ crmData: newCrm }, () => {
+      setCrmData(newCrm)
+      toast.success("Lead updated")
+    })
+  }
+
   return {
     data,
     sessionIds,
@@ -282,6 +327,7 @@ export function useDashboard() {
     showTopTierOnly,
     minReviews,
     maxReviews,
+    statusFilter,
     selectedIds,
     confirmState,
     setConfirmState,
@@ -294,6 +340,7 @@ export function useDashboard() {
     handleTopTierFilter,
     handleMinReviewsChange,
     handleMaxReviewsChange,
+    handleStatusFilterChange,
     handleSelectRow,
     handleSelectAll,
     setCurrentPage,
@@ -301,6 +348,8 @@ export function useDashboard() {
     clearDatabase,
     deleteSession,
     deleteSelected,
-    openConfirm
+    openConfirm,
+    crmData,
+    updateCrmData
   }
 }

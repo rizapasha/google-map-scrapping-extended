@@ -16,6 +16,9 @@ import { BatchActionBar } from "~/components/dashboard/BatchActionBar"
 import { LeadsTable } from "~/components/dashboard/LeadsTable"
 import { SessionSidebar } from "~/components/dashboard/SessionSidebar"
 import { ConfirmDialog } from "~/components/dashboard/ConfirmDialog"
+import { CrmDrawer } from "~/components/dashboard/CrmDrawer"
+import { useState } from "react"
+import type { ScrapedData } from "~/lib/utils/scraper-utils"
 
 function OptionsIndex() {
   const {
@@ -54,8 +57,20 @@ function OptionsIndex() {
     loadData,
     clearDatabase,
     deleteSession,
-    deleteSelected
+    deleteSelected,
+    crmData,
+    updateCrmData,
+    statusFilter,
+    handleStatusFilterChange
   } = useDashboard()
+
+  const [drawerLead, setDrawerLead] = useState<ScrapedData | null>(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+
+  const handleRowClick = (lead: ScrapedData) => {
+    setDrawerLead(lead)
+    setIsDrawerOpen(true)
+  }
 
   const isAllSelected =
     sortedData.length > 0 && sortedData.every((item) => selectedIds.has(generateRowId(item)))
@@ -80,6 +95,8 @@ function OptionsIndex() {
         onMinReviewsChange={handleMinReviewsChange}
         maxReviews={maxReviews}
         onMaxReviewsChange={handleMaxReviewsChange}
+        statusFilter={statusFilter}
+        onStatusFilterChange={handleStatusFilterChange}
         onRefresh={loadData}
         onExportSession={() => exportToCSV(sortedData, "filtered_session")}
         onExportAll={() => exportToCSV(data, "all_data")}
@@ -154,6 +171,8 @@ function OptionsIndex() {
                     onSelectAll={handleSelectAll}
                     onSelectRow={handleSelectRow}
                     onPageChange={setCurrentPage}
+                    crmData={crmData}
+                    onRowClick={handleRowClick}
                   />
                 </div>
               </>
@@ -181,6 +200,15 @@ function OptionsIndex() {
         title={confirmState.title}
         description={confirmState.description}
         onConfirm={confirmState.onConfirm}
+      />
+
+      <CrmDrawer
+        key={drawerLead ? generateRowId(drawerLead) : "none"}
+        selectedLead={drawerLead}
+        crmRecord={drawerLead ? crmData[generateRowId(drawerLead)] : null}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onUpdate={(updates) => drawerLead && updateCrmData(generateRowId(drawerLead), updates)}
       />
 
       <Toaster position="bottom-right" richColors />

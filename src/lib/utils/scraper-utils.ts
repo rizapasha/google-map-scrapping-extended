@@ -9,6 +9,14 @@ export interface ScrapedData {
   coordinates: string
 }
 
+export type LeadStatus = "NEW" | "CONTACTED" | "FOLLOW_UP" | "NOT_INTERESTED" | "CLOSED"
+
+export interface CrmData {
+  status: LeadStatus
+  notes: string
+  lastUpdated: number
+}
+
 export function calculateLeadScore(item: ScrapedData): number {
   let score = 0
   if (item.website) score += 30

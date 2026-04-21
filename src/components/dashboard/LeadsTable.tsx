@@ -14,8 +14,10 @@ import {
   generateRowId,
   formatWhatsAppLink,
   formatMapsLink,
-  type ScrapedData
+  type ScrapedData,
+  type CrmData
 } from "~/lib/utils/scraper-utils"
+import { Badge } from "~/components/ui/badge"
 
 interface LeadsTableProps {
   paginatedData: ScrapedData[]
@@ -28,6 +30,8 @@ interface LeadsTableProps {
   onSelectAll: (checked: boolean) => void
   onSelectRow: (id: string, checked: boolean) => void
   onPageChange: (page: number) => void
+  crmData: Record<string, CrmData>
+  onRowClick: (item: ScrapedData) => void
 }
 
 export function LeadsTable({
@@ -40,7 +44,9 @@ export function LeadsTable({
   isAllSelected,
   onSelectAll,
   onSelectRow,
-  onPageChange
+  onPageChange,
+  crmData,
+  onRowClick
 }: LeadsTableProps) {
   return (
     <div className="space-y-4">
@@ -60,6 +66,7 @@ export function LeadsTable({
               <TableHead className="w-[180px]">Rating</TableHead>
               <TableHead className="w-[180px]">Contact Info</TableHead>
               <TableHead className="w-[150px]">Website</TableHead>
+              <TableHead className="w-[120px]">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -70,8 +77,13 @@ export function LeadsTable({
                 const isSelected = selectedIds.has(rowId)
 
                 return (
-                  <TableRow key={rowId} data-state={isSelected ? "selected" : undefined}>
-                    <TableCell className="pl-4">
+                  <TableRow
+                    key={rowId}
+                    data-state={isSelected ? "selected" : undefined}
+                    className="cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-800/50"
+                    onClick={() => onRowClick(item)}
+                  >
+                    <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={(checked) => onSelectRow(rowId, checked as boolean)}
@@ -91,6 +103,7 @@ export function LeadsTable({
                             rel="noopener noreferrer"
                             className="mt-0.5 shrink-0 text-primary hover:opacity-80 transition-opacity"
                             title="View in Google Maps"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <MapPin className="h-3 w-3" />
                           </a>
@@ -115,6 +128,7 @@ export function LeadsTable({
                             rel="noopener noreferrer"
                             className="shrink-0 text-[#25D366] hover:opacity-80 transition-opacity"
                             title="Chat on WhatsApp"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <MessageCircle className="h-4 w-4" />
                           </a>
@@ -135,6 +149,7 @@ export function LeadsTable({
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center text-xs font-medium text-primary hover:underline truncate max-w-[200px]"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {item.website}
                           <ExternalLink className="ml-1 h-3 w-3 shrink-0" />
@@ -143,12 +158,33 @@ export function LeadsTable({
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const status = crmData[rowId]?.status || "NEW"
+                        const variants: Record<string, string> = {
+                          NEW: "bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400",
+                          CONTACTED:
+                            "bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400",
+                          FOLLOW_UP:
+                            "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400",
+                          NOT_INTERESTED:
+                            "bg-slate-100 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400",
+                          CLOSED:
+                            "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400"
+                        }
+                        return (
+                          <Badge variant="secondary" className={variants[status]}>
+                            {status.replace("_", " ")}
+                          </Badge>
+                        )
+                      })()}
+                    </TableCell>
                   </TableRow>
                 )
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   No results.
                 </TableCell>
               </TableRow>
