@@ -42,6 +42,8 @@ interface SessionSidebarProps {
   onMinReviewsChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   maxReviews: string
   onMaxReviewsChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  statusFilter: string
+  onStatusFilterChange: (val: string) => void
   onRefresh: () => void
   onExportSession: () => void
   onExportAll: () => void
@@ -69,6 +71,8 @@ export function SessionSidebar({
   onMinReviewsChange,
   maxReviews,
   onMaxReviewsChange,
+  statusFilter,
+  onStatusFilterChange,
   onRefresh,
   onExportSession,
   onExportAll,
@@ -235,6 +239,29 @@ export function SessionSidebar({
                   min={0}
                 />
               </div>
+            </div>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* CRM Filters */}
+        <SidebarGroup>
+          <SidebarGroupLabel>CRM Filters</SidebarGroupLabel>
+          <SidebarGroupContent className="px-2 pt-2">
+            <div className="space-y-2">
+              <Label className="text-xs">Lead Status</Label>
+              <Select value={statusFilter} onValueChange={onStatusFilterChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Statuses</SelectItem>
+                  <SelectItem value="NEW">New</SelectItem>
+                  <SelectItem value="CONTACTED">Contacted</SelectItem>
+                  <SelectItem value="FOLLOW_UP">Follow Up</SelectItem>
+                  <SelectItem value="NOT_INTERESTED">Not Interested</SelectItem>
+                  <SelectItem value="CLOSED">Closed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </SidebarGroupContent>
         </SidebarGroup>
