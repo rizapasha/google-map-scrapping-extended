@@ -14,6 +14,19 @@ const jitteredDelay = async (baseMs = 2000) => {
   await sleep(baseMs + jitter)
 }
 
+// Find the closest scrollable parent of the feed
+function findScrollableContainer(el: HTMLElement): HTMLElement {
+  let parent = el.parentElement
+  while (parent) {
+    const overflow = window.getComputedStyle(parent).overflowY
+    if (overflow === "auto" || overflow === "scroll") {
+      return parent
+    }
+    parent = parent.parentElement
+  }
+  return el
+}
+
 // Find the detail pane's h1 element (NOT inside the feed)
 function findDetailPaneH1(): HTMLHeadingElement | null {
   const allH1s = document.querySelectorAll("h1")
@@ -182,6 +195,7 @@ async function performScraping(limit: number, sessionId: string) {
         `SCRAPER: Found ${snapshotLength} cards in current view. Progress: ${results.length}/${limit}`
       )
 
+      let consecutiveDuplicates = 0
       for (let i = 0; i < snapshotLength; i++) {
         if (results.length >= limit) break
 
@@ -209,8 +223,16 @@ async function performScraping(limit: number, sessionId: string) {
         if (details.title) {
           const key = normalizeKey(details.title, details.address)
           if (contentKeys.has(key)) {
-            console.log(`SCRAPER: Duplicate detected, skipping: "${details.title}"`)
-            // Still need to click back if we clicked in
+            consecutiveDuplicates++
+            console.log(
+              `SCRAPER: Duplicate detected (${consecutiveDuplicates}), skipping: "${details.title}"`
+            )
+
+            if (consecutiveDuplicates >= 5) {
+              console.log("SCRAPER: High duplicate threshold reached. Forcing scroll jump.")
+              // We don't break yet, we still need to go back from the card we just clicked
+            }
+
             const backButton = document.querySelector(
               'button[aria-label="Back"], button[aria-label="Kembali"], button[jsaction*="back"]'
             ) as HTMLButtonElement
@@ -218,9 +240,12 @@ async function performScraping(limit: number, sessionId: string) {
               backButton.click()
               await sleep(1000)
             }
+
+            if (consecutiveDuplicates >= 5) break
             continue
           }
 
+          consecutiveDuplicates = 0
           contentKeys.add(key)
           results.push(details)
           console.log("SCRAPER: Extracted ->", details.title)
@@ -239,14 +264,52 @@ async function performScraping(limit: number, sessionId: string) {
       }
 
       if (results.length < limit) {
-        // Scroll for more results
-        const previousHeight = feedElement.scrollHeight
-        feedElement.scrollTo(0, feedElement.scrollHeight)
-        console.log("SCRAPER: Scrolling for more results...")
-        await jitteredDelay(2500)
+        // DIRECT TARGETING: Priority to the feed element itself if it's scrollable, otherwise fallback
+        const scrollable =
+          (feedElement as HTMLElement).scrollHeight > (feedElement as HTMLElement).clientHeight
+            ? (feedElement as HTMLElement)
+            : findScrollableContainer(feedElement as HTMLElement)
 
-        if (feedElement.scrollHeight === previousHeight) {
-          console.log("SCRAPER: Reached end of feed.")
+        let scrollRetries = 0
+        let reachedEnd = false
+
+        while (scrollRetries < 3) {
+          const previousHeight = scrollable.scrollHeight
+          console.log(
+            `SCRAPER: Scrolling for more results (Attempt ${scrollRetries + 1} on ${
+              scrollable.tagName
+            })...`
+          )
+
+          // AGGRESSIVE NUDGE: Scroll up more (200px) to trigger the loading observer
+          scrollable.scrollTo(0, scrollable.scrollHeight - 200)
+          await sleep(800)
+          scrollable.scrollTo(0, scrollable.scrollHeight)
+
+          await jitteredDelay(3500) // Give more time for XHR and rendering
+
+          // Check for end indicator text in the feed or body
+          const bodyText = document.body.innerText
+          if (
+            bodyText.includes("You've reached the end") ||
+            bodyText.includes("Anda telah mencapai akhir") ||
+            bodyText.includes("Tidak ada hasil lagi")
+          ) {
+            console.log("SCRAPER: End of results indicator found.")
+            reachedEnd = true
+            break
+          }
+
+          if (scrollable.scrollHeight > previousHeight) {
+            console.log("SCRAPER: New content loaded successfully.")
+            break
+          }
+
+          scrollRetries++
+        }
+
+        if (reachedEnd || scrollRetries >= 3) {
+          console.log("SCRAPER: No more results or max retries reached.")
           isScrolling = false
         }
       }
@@ -285,7 +348,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "START_SCRAPING") {
-    const { context, location, limit } = message.payload
+    const { context, location } = message.payload
+    const limit = Number(message.payload.limit)
 
     const searchBox = document.querySelector(
       'input#searchboxinput, input[aria-label*="Maps"], input[name="q"]'
@@ -331,7 +395,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         setTimeout(() => {
           const sessionId = `Session: ${context} ${location} (${new Date().toLocaleString()})`
-          performScraping(limit || 500, sessionId)
+          if (!limit || isNaN(limit)) {
+            console.warn("SCRAPER: Limit missing or invalid, falling back to 500")
+            performScraping(500, sessionId)
+          } else {
+            performScraping(limit, sessionId)
+          }
         }, 7000)
       }, 500)
 
