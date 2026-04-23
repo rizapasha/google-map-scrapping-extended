@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   calculateLeadScore,
   generateRowId,
+  DEFAULT_LEAD_SCORE_CONFIG,
   type ScrapedData,
-  type CrmData
+  type CrmData,
+  type LeadScoreConfig
 } from "../utils/scraper-utils"
 import { toast } from "sonner"
 
@@ -22,6 +24,8 @@ export function useDashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL")
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [pinnedSessions, setPinnedSessions] = useState<string[]>([])
+  const [leadScoreConfig, setLeadScoreConfig] = useState<LeadScoreConfig>(DEFAULT_LEAD_SCORE_CONFIG)
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean
     title: string
@@ -41,29 +45,38 @@ export function useDashboard() {
   }
 
   const loadData = useCallback(() => {
-    chrome.storage.local.get(["scrapedData", "crmData"], (res) => {
-      const storedData = (res.scrapedData as ScrapedData[]) || []
-      const storedCrm = (res.crmData as Record<string, CrmData>) || {}
+    chrome.storage.local.get(
+      ["scrapedData", "crmData", "pinnedSessions", "leadScoreConfig"],
+      (res) => {
+        const storedData = (res.scrapedData as ScrapedData[]) || []
+        const storedCrm = (res.crmData as Record<string, CrmData>) || {}
+        const storedPinned = (res.pinnedSessions as string[]) || []
+        const storedConfig = (res.leadScoreConfig as LeadScoreConfig) || DEFAULT_LEAD_SCORE_CONFIG
 
-      setData(storedData)
-      setCrmData(storedCrm)
+        setData(storedData)
+        setCrmData(storedCrm)
+        setPinnedSessions(storedPinned)
+        setLeadScoreConfig(storedConfig)
 
-      if (storedData.length > 0) {
-        const uniqueSessions = Array.from(
-          new Set(storedData.map((item) => item.sessionId || "Legacy Session"))
-        )
-        uniqueSessions.sort((a, b) => b.localeCompare(a))
+        if (storedData.length > 0) {
+          const uniqueSessions = Array.from(
+            new Set(storedData.map((item) => item.sessionId || "Legacy Session"))
+          )
+          // Sessions are sorted in sessionIds useMemo now
 
-        setSelectedSession((prev) => {
-          if (!prev || !uniqueSessions.includes(prev)) {
-            return uniqueSessions[0]
-          }
-          return prev
-        })
-      } else {
-        setSelectedSession("")
+          setSelectedSession((prev) => {
+            if (!prev || !uniqueSessions.includes(prev)) {
+              // Priority to first pinned session if available
+              const pinnedInView = storedPinned.filter((p) => uniqueSessions.includes(p))
+              return pinnedInView.length > 0 ? pinnedInView[0] : uniqueSessions[0]
+            }
+            return prev
+          })
+        } else {
+          setSelectedSession("")
+        }
       }
-    })
+    )
   }, [])
 
   useEffect(() => {
@@ -84,8 +97,15 @@ export function useDashboard() {
   }, [data])
 
   const sessionIds = useMemo(() => {
-    return Object.keys(groupedData).sort((a, b) => b.localeCompare(a))
-  }, [groupedData])
+    const rawSessions = Object.keys(groupedData)
+    const pinned = rawSessions.filter((s) => pinnedSessions.includes(s))
+    const unpinned = rawSessions.filter((s) => !pinnedSessions.includes(s))
+
+    pinned.sort((a, b) => b.localeCompare(a))
+    unpinned.sort((a, b) => b.localeCompare(a))
+
+    return [...pinned, ...unpinned]
+  }, [groupedData, pinnedSessions])
 
   const currentData = useMemo(() => {
     return selectedSession ? groupedData[selectedSession] || [] : []
@@ -120,7 +140,9 @@ export function useDashboard() {
       const matchesRating = parseFloat(item.ratingScore) >= minRating
       const hasWebsite = !hideNoWebsite || !!item.website
       const hasPhone = !hideNoPhone || !!item.phone
-      const isTopTier = !showTopTierOnly || calculateLeadScore(item) >= 80
+      const isTopTier =
+        !showTopTierOnly ||
+        calculateLeadScore(item, leadScoreConfig) >= leadScoreConfig.topTierThreshold
 
       const revCount = parseInt(item.reviewCount.replace(/,/g, "")) || 0
       const parsedMinRev = minReviews ? parseInt(minReviews) : 0
@@ -150,7 +172,8 @@ export function useDashboard() {
     showTopTierOnly,
     minReviews,
     maxReviews,
-    statusFilter
+    statusFilter,
+    leadScoreConfig
   ])
 
   const sortedData = useMemo(() => {
@@ -309,6 +332,42 @@ export function useDashboard() {
     })
   }
 
+  const renameSession = (oldName: string, newName: string) => {
+    if (!newName || oldName === newName) return
+
+    const newData = data.map((item) => {
+      if ((item.sessionId || "Legacy Session") === oldName) {
+        return { ...item, sessionId: newName }
+      }
+      return item
+    })
+
+    chrome.storage.local.set({ scrapedData: newData }, () => {
+      setData(newData)
+      setSelectedSession(newName)
+      toast.success(`Session renamed to "${newName}"`)
+    })
+  }
+
+  const togglePinSession = (sessionId: string) => {
+    const isPinned = pinnedSessions.includes(sessionId)
+    const newPinned = isPinned
+      ? pinnedSessions.filter((s) => s !== sessionId)
+      : [...pinnedSessions, sessionId]
+
+    chrome.storage.local.set({ pinnedSessions: newPinned }, () => {
+      setPinnedSessions(newPinned)
+      toast.success(isPinned ? "Session unpinned" : "Session pinned")
+    })
+  }
+
+  const updateLeadScoreConfig = (config: LeadScoreConfig) => {
+    chrome.storage.local.set({ leadScoreConfig: config }, () => {
+      setLeadScoreConfig(config)
+      toast.success("Scoring metrics updated")
+    })
+  }
+
   return {
     data,
     sessionIds,
@@ -350,6 +409,11 @@ export function useDashboard() {
     deleteSelected,
     openConfirm,
     crmData,
-    updateCrmData
+    updateCrmData,
+    pinnedSessions,
+    togglePinSession,
+    renameSession,
+    leadScoreConfig,
+    updateLeadScoreConfig
   }
 }
