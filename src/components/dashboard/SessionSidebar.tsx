@@ -1,3 +1,4 @@
+import { Button } from "~/components/ui/button"
 import {
   Sidebar,
   SidebarContent,
@@ -22,7 +23,30 @@ import { Switch } from "~/components/ui/switch"
 import { Label } from "~/components/ui/label"
 import { Input } from "~/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip"
-import { Database, RefreshCw, Download, Trash2, Info } from "lucide-react"
+import {
+  Database,
+  RefreshCw,
+  Download,
+  Trash2,
+  Info,
+  Pin,
+  Settings2,
+  Check,
+  ChevronsUpDown
+} from "lucide-react"
+import { useState } from "react"
+import { LeadScoreConfigModal } from "./LeadScoreConfigModal"
+import { type LeadScoreConfig } from "~/lib/utils/scraper-utils"
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "~/components/ui/command"
+import { cn } from "~/lib/utils"
 
 interface SessionSidebarProps {
   sessionIds: string[]
@@ -51,6 +75,10 @@ interface SessionSidebarProps {
   onClearAll: () => void
   dataLength: number
   sortedDataLength: number
+  pinnedSessions: string[]
+  onTogglePin: (id: string) => void
+  leadScoreConfig: LeadScoreConfig
+  onUpdateLeadScoreConfig: (config: LeadScoreConfig) => void
 }
 
 export function SessionSidebar({
@@ -79,8 +107,14 @@ export function SessionSidebar({
   onDeleteSession,
   onClearAll,
   dataLength,
-  sortedDataLength
+  sortedDataLength,
+  pinnedSessions,
+  onTogglePin,
+  leadScoreConfig,
+  onUpdateLeadScoreConfig
 }: SessionSidebarProps) {
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [isComboOpen, setIsComboOpen] = useState(false)
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
@@ -98,22 +132,106 @@ export function SessionSidebar({
       <SidebarContent>
         {/* Session Selection */}
         <SidebarGroup>
-          <SidebarGroupLabel>Session</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <div className="px-2">
-              <Select value={selectedSession} onValueChange={onSessionChange}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select session" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sessionIds.map((id) => (
-                    <SelectItem key={id} value={id}>
-                      {id.length > 28 ? id.substring(0, 28) + "..." : id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex items-center justify-between px-2 pr-4">
+            <SidebarGroupLabel>Sessions</SidebarGroupLabel>
+          </div>
+          <SidebarGroupContent className="px-2">
+            <Popover open={isComboOpen} onOpenChange={setIsComboOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={isComboOpen}
+                  className="w-full justify-between h-9 px-3 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                >
+                  <span className="truncate">{selectedSession || "Select session..."}</span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[240px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search sessions..." />
+                  <CommandList>
+                    <CommandEmpty>No session found.</CommandEmpty>
+                    <CommandGroup
+                      heading="Pinned"
+                      className={pinnedSessions.length === 0 ? "hidden" : ""}
+                    >
+                      {sessionIds
+                        .filter((id) => pinnedSessions.includes(id))
+                        .map((id) => (
+                          <CommandItem
+                            key={id}
+                            value={id}
+                            onSelect={() => {
+                              onSessionChange(id)
+                              setIsComboOpen(false)
+                            }}
+                            className="flex items-center justify-between group"
+                          >
+                            <div className="flex items-center flex-1 overflow-hidden">
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4 shrink-0",
+                                  selectedSession === id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <span className="truncate">{id}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-primary hover:bg-primary/10 ml-2 shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onTogglePin(id)
+                              }}
+                            >
+                              <Pin className="h-3 w-3 fill-current" />
+                            </Button>
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                    <CommandGroup heading="All Sessions">
+                      {sessionIds
+                        .filter((id) => !pinnedSessions.includes(id))
+                        .map((id) => (
+                          <CommandItem
+                            key={id}
+                            value={id}
+                            onSelect={() => {
+                              onSessionChange(id)
+                              setIsComboOpen(false)
+                            }}
+                            className="flex items-center justify-between group"
+                          >
+                            <div className="flex items-center flex-1 overflow-hidden">
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4 shrink-0",
+                                  selectedSession === id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <span className="truncate">{id}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground/30 group-hover:text-primary group-hover:bg-primary/10 ml-2 shrink-0 transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onTogglePin(id)
+                              }}
+                            >
+                              <Pin className="h-3 w-3" />
+                            </Button>
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -158,7 +276,7 @@ export function SessionSidebar({
                     htmlFor="top-tier-leads"
                     className="text-xs cursor-pointer font-bold text-primary"
                   >
-                    Top Tier Leads (&gt;80 Score)
+                    Top Tier Leads (&gt;{leadScoreConfig.topTierThreshold} Score)
                   </Label>
                   <TooltipProvider delayDuration={200}>
                     <Tooltip>
@@ -166,27 +284,38 @@ export function SessionSidebar({
                         <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="w-64 p-3 bg-white dark:bg-slate-900 border shadow-lg text-sm text-slate-700 dark:text-slate-300">
-                        <p className="font-bold mb-1 text-primary">Lead Score Calculation:</p>
+                        <p className="font-bold mb-1 text-primary">Current Scoring Rule:</p>
                         <ul className="space-y-1 list-disc pl-4 text-xs">
                           <li>
-                            <strong>+30 pts</strong>: Has Website
+                            <strong>+{leadScoreConfig.websiteWeight} pts</strong>: Has Website
                           </li>
                           <li>
-                            <strong>+30 pts</strong>: Has Phone Number
+                            <strong>+{leadScoreConfig.phoneWeight} pts</strong>: Has Phone Number
                           </li>
                           <li>
-                            <strong>+20 pts</strong>: Rating is 4.0 or higher
+                            <strong>+{leadScoreConfig.ratingWeight} pts</strong>: Rating &ge;{" "}
+                            {leadScoreConfig.minRatingThreshold}
                           </li>
                           <li>
-                            <strong>+20 pts</strong>: Between 10 and 1,000 reviews
+                            <strong>+{leadScoreConfig.reviewWeight} pts</strong>: Reviews between{" "}
+                            {leadScoreConfig.minReviewThreshold} and{" "}
+                            {leadScoreConfig.maxReviewThreshold}
                           </li>
                         </ul>
-                        <p className="mt-2 text-xs opacity-80">
-                          A perfect score of 100 indicates a highly active, verifiable business.
+                        <p className="mt-2 text-xs opacity-80 italic">
+                          Target Score: {leadScoreConfig.topTierThreshold}+
                         </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 ml-auto"
+                    onClick={() => setIsConfigOpen(true)}
+                  >
+                    <Settings2 className="h-3 w-3" />
+                  </Button>
                 </div>
                 <Switch
                   id="top-tier-leads"
@@ -310,6 +439,17 @@ export function SessionSidebar({
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      <LeadScoreConfigModal
+        key={String(isConfigOpen)}
+        isOpen={isConfigOpen}
+        onOpenChange={setIsConfigOpen}
+        config={leadScoreConfig}
+        onSave={(newConfig) => {
+          onUpdateLeadScoreConfig(newConfig)
+          setIsConfigOpen(false)
+        }}
+      />
     </Sidebar>
   )
 }
