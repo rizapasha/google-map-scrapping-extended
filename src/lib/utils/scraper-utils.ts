@@ -17,16 +17,43 @@ export interface CrmData {
   lastUpdated: number
 }
 
-export function calculateLeadScore(item: ScrapedData): number {
+export interface LeadScoreConfig {
+  websiteWeight: number
+  phoneWeight: number
+  ratingWeight: number
+  reviewWeight: number
+  minRatingThreshold: number
+  minReviewThreshold: number
+  maxReviewThreshold: number
+  topTierThreshold: number
+}
+
+export const DEFAULT_LEAD_SCORE_CONFIG: LeadScoreConfig = {
+  websiteWeight: 30,
+  phoneWeight: 30,
+  ratingWeight: 20,
+  reviewWeight: 20,
+  minRatingThreshold: 4.0,
+  minReviewThreshold: 10,
+  maxReviewThreshold: 1000,
+  topTierThreshold: 80
+}
+
+export function calculateLeadScore(
+  item: ScrapedData,
+  config: LeadScoreConfig = DEFAULT_LEAD_SCORE_CONFIG
+): number {
   let score = 0
-  if (item.website) score += 30
-  if (item.phone) score += 30
+  if (item.website) score += config.websiteWeight
+  if (item.phone) score += config.phoneWeight
 
   const rating = parseFloat(item.ratingScore) || 0
-  if (rating >= 4.0) score += 20
+  if (rating >= config.minRatingThreshold) score += config.ratingWeight
 
   const reviews = parseInt(item.reviewCount.replace(/,/g, "")) || 0
-  if (reviews >= 10 && reviews <= 1000) score += 20
+  if (reviews >= config.minReviewThreshold && reviews <= config.maxReviewThreshold) {
+    score += config.reviewWeight
+  }
 
   return score
 }
