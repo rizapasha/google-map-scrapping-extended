@@ -17,7 +17,10 @@ import { LeadsTable } from "~/components/dashboard/LeadsTable"
 import { SessionSidebar } from "~/components/dashboard/SessionSidebar"
 import { ConfirmDialog } from "~/components/dashboard/ConfirmDialog"
 import { CrmDrawer } from "~/components/dashboard/CrmDrawer"
+import { RenameSessionDialog } from "~/components/dashboard/RenameSessionDialog"
 import { useState } from "react"
+import { Button } from "~/components/ui/button"
+import { Pencil } from "lucide-react"
 import type { ScrapedData } from "~/lib/utils/scraper-utils"
 
 function OptionsIndex() {
@@ -61,11 +64,17 @@ function OptionsIndex() {
     crmData,
     updateCrmData,
     statusFilter,
-    handleStatusFilterChange
+    handleStatusFilterChange,
+    pinnedSessions,
+    togglePinSession,
+    renameSession,
+    leadScoreConfig,
+    updateLeadScoreConfig
   } = useDashboard()
 
   const [drawerLead, setDrawerLead] = useState<ScrapedData | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [isRenameOpen, setIsRenameOpen] = useState(false)
 
   const handleRowClick = (lead: ScrapedData) => {
     setDrawerLead(lead)
@@ -104,6 +113,10 @@ function OptionsIndex() {
         onClearAll={clearDatabase}
         dataLength={data.length}
         sortedDataLength={sortedData.length}
+        pinnedSessions={pinnedSessions}
+        onTogglePin={togglePinSession}
+        leadScoreConfig={leadScoreConfig}
+        onUpdateLeadScoreConfig={updateLeadScoreConfig}
       />
 
       <SidebarInset className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -111,15 +124,27 @@ function OptionsIndex() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div className="flex flex-1 items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">{selectedSession || "Overview"}</h2>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold">{selectedSession || "Overview"}</h2>
+                {selectedSession && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-primary transition-colors"
+                    onClick={() => setIsRenameOpen(true)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">
                 {selectedSession
                   ? `${currentData.length} records in this session`
                   : "Select a session to view data"}
               </p>
             </div>
-            <div className="flex items-center gap-2 pr-4">
+            <div className="flex items-center gap-2">
               <Badge variant="outline" className="font-mono">
                 {sessionIds.length} sessions
               </Badge>
@@ -209,6 +234,14 @@ function OptionsIndex() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onUpdate={(updates) => drawerLead && updateCrmData(generateRowId(drawerLead), updates)}
+      />
+
+      <RenameSessionDialog
+        key={selectedSession + isRenameOpen}
+        isOpen={isRenameOpen}
+        onOpenChange={setIsRenameOpen}
+        currentName={selectedSession}
+        onRename={(newName) => renameSession(selectedSession, newName)}
       />
 
       <Toaster position="bottom-right" richColors />
